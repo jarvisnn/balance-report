@@ -1,6 +1,6 @@
 # Balance report
 
-To fetch token balances of an address at any time in the past.
+To fetch all token balances of an address at a specific time.
 
 The page is live at [https://jarvis57.github.io/balance-report](https://jarvis57.github.io/balance-report)
 
