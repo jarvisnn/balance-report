@@ -2,6 +2,8 @@
 
 To fetch token balances of an address at any time in the past.
 
+The page is live at [https://jarvis57.github.io/balance-report](https://jarvis57.github.io/balance-report)
+
 ## Available Scripts
 
 In the project directory, you can run:
