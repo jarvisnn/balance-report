@@ -1,6 +1,6 @@
-# Getting Started with Create React App
+# Balance report
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+To fetch token balances of an address at any time in the past.
 
 ## Available Scripts
 

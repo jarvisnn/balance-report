@@ -10,6 +10,11 @@ import moment from 'moment';
 // const tokenList = [{"id":"kyber-network","symbol":"kncl","name":"Kyber Network Crystal Legacy","platforms":{"ethereum":"0xdd974d5c2e2928dea5f71b9825b8b646686bd200","fantom":"0x765277eebeca2e31912c9946eae1021199b39c61","harmony-shard-0":"0x0a47d2dc4b7ee3d4d7fd471d993b0821621e1769"}}];
 
 const dateTimeFormat = "DD-MM-YYYY HH:mm Z";
+const nativeTokens = {
+  "ethereum": "eth",
+  "polygon-pos": "matic",
+};
+
 class App extends React.Component {
 
   constructor(props) {
@@ -93,7 +98,7 @@ class App extends React.Component {
                 {
                   chain: k,
                   block: block,
-                  tokenSymbol: k,
+                  tokenSymbol: nativeTokens[k],
                   tokenName: k,
                   contract: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
                   balance: balance,
@@ -185,7 +190,7 @@ class App extends React.Component {
               <List.Item as='li'>Block is used if both block and datetime exist</List.Item>
             </List>
 
-            <i>If you have any issue, ping me at <a href = "mailto: nvdung149@ggmail.com">nvdung149@ggmail.com</a></i>
+            <i>If you have any issue, ping me at <a href = "mailto: nvdung149@gmail.com">nvdung149@gmail.com</a></i>
           </Message>
           
           <Input value={this.state.address} disabled={this.state.fetching} placeholder='Input the address to check ...' size="large" fluid focus icon="search" onChange={(e, data) => {
