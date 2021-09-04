@@ -3,7 +3,7 @@ import Web3 from 'web3';
 import './App.css';
 import tokenList from './tokenlist.json';
 import erc20abi from './erc20.abi.json';
-import { Input, Button, Container, Header, Table } from 'semantic-ui-react'
+import { Input, Button, Container, Header, Table, Message, List } from 'semantic-ui-react'
 import { DateTimeInput } from 'semantic-ui-calendar-react';
 import moment from 'moment';
 
@@ -76,8 +76,35 @@ class App extends React.Component {
       };
       this.setState({nearestBlocks});
 
+      this.jobs = 0;
+
+     // Native tokens
+      for (let k in this.web3s) {
+          let block = nearestBlocks[k]?.block ?? "latest";
+          this.web3s[k].eth.getBalance(this.state.address, block, async (err, balanceRaw) => {
+            if (err) {
+              console.log(err, this.state.address, block);
+              // this.reportError(err.message, false);
+            } else if (balanceRaw && balanceRaw !== "0") {
+              let balance = this.web3s[k].utils.fromWei(balanceRaw);
+
+              this.setState({balances: [
+                ...this.state.balances,
+                {
+                  chain: k,
+                  block: block,
+                  tokenSymbol: k,
+                  tokenName: k,
+                  contract: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+                  balance: balance,
+                }
+              ]})
+            }
+          })
+      }
+      
       // Fetch by batchs
-      let batchSize = 50;
+      let batchSize = 100;
       for (let i = 0; i < tokenList.length; i+=batchSize) {
         let batches = {};
         for (let k in this.web3s) {
@@ -92,6 +119,8 @@ class App extends React.Component {
               let block = nearestBlocks[k]?.block ?? "latest";
               let contractAddress = platforms[k].trim();
               let contract = new this.web3s[k].eth.Contract(erc20abi, contractAddress);
+
+              this.jobs ++;
               batches[k].add(
                 contract.methods.balanceOf(this.state.address).call.request({}, block, async (err, balanceRaw) => {
                   if (err) {
@@ -117,6 +146,10 @@ class App extends React.Component {
                     ]})
                     console.log(symbol, name, contractAddress, err, balanceRaw, decimals, balance);
                   }
+                  this.jobs --;
+                  if (this.jobs === 0) {
+                    this.setState({fetching: false});
+                  }
                 })
               );
             }
@@ -127,7 +160,6 @@ class App extends React.Component {
           batches[k].execute();
         }
       };
-
     } catch (e) {
       this.reportError(e.message);
     }
@@ -145,6 +177,17 @@ class App extends React.Component {
     return (
       <div className="App">
         <Container tectclassName="App-header">
+          <Message positive>
+            <Message.Header>Welcome </Message.Header>
+            <List as='ul'>
+              <List.Item as='li'>Fetching balances by datetime may take time, please be patient</List.Item>
+              <List.Item as='li'>Leaving the datetime and block empty for the latest block data</List.Item>
+              <List.Item as='li'>Block is used if both block and datetime exist</List.Item>
+            </List>
+
+            <i>If you have any issue, ping me at <a href = "mailto: nvdung149@ggmail.com">nvdung149@ggmail.com</a></i>
+          </Message>
+          
           <Input value={this.state.address} disabled={this.state.fetching} placeholder='Input the address to check ...' size="large" fluid focus icon="search" onChange={(e, data) => {
             this.setState({ address: data.value });
           }}/>  
