@@ -7,16 +7,20 @@ import { Input, Button, Container, Header, Table } from 'semantic-ui-react'
 import { DateTimeInput } from 'semantic-ui-calendar-react';
 import moment from 'moment';
 
+// const tokenList = [{"id":"kyber-network","symbol":"kncl","name":"Kyber Network Crystal Legacy","platforms":{"ethereum":"0xdd974d5c2e2928dea5f71b9825b8b646686bd200","fantom":"0x765277eebeca2e31912c9946eae1021199b39c61","harmony-shard-0":"0x0a47d2dc4b7ee3d4d7fd471d993b0821621e1769"}}];
+
 const dateTimeFormat = "DD-MM-YYYY HH:mm Z";
 class App extends React.Component {
 
   constructor(props) {
     super(props);
 
-    this.web3Eth = new Web3(new Web3.providers.HttpProvider("https://mainnet.infura.io/v3/06be4b923b9446b8bec846a81e356f81")); 
+    // this.web3Eth = new Web3(new Web3.providers.HttpProvider("https://mainnet.infura.io/v3/06be4b923b9446b8bec846a81e356f81")); 
+    this.web3Eth = new Web3(new Web3.providers.HttpProvider("https://eth-mainnet.alchemyapi.io/v2/fJR25Od4foGhVrli2OCxRjmP5pkNhg1O")); 
     this.web3s = {
       "ethereum": this.web3Eth,
-      "polygon-pos": new Web3(new Web3.providers.HttpProvider("https://polygon-mainnet.infura.io/v3/06be4b923b9446b8bec846a81e356f81")),
+      // https://polygon-mainnet.infura.io/v3/06be4b923b9446b8bec846a81e356f81
+      "polygon-pos": new Web3(new Web3.providers.HttpProvider("https://polygon-mainnet.g.alchemy.com/v2/4IApMoKFRmy2g8eFrFV9uGxBf6j8wM7Y")),
     };
 
     this.fetchBalances = this.fetchBalances.bind(this);
@@ -25,6 +29,9 @@ class App extends React.Component {
     this.state = {
       balances: [],
       nearestBlocks: {},
+      time: undefined,
+      blocks: {},
+      address: window.localStorage.getItem("address"),
     }
   }
 
@@ -54,17 +61,13 @@ class App extends React.Component {
       this.reportError("Wrong address");
       return;
     }
-
-    if (!this.state.time) {
-      this.reportError("Missing time");
-      return;
-    }
+    window.localStorage.setItem("address", this.state.address);
 
     try {
       let time = moment(this.state.time, dateTimeFormat).toDate().getTime() / 1000;
       let nearestBlocks = {};
       for (let k in this.web3s) {
-        let block = await this.findNearstBlock(this.web3s[k], time);
+        let block = this.state.blocks[k] || (time ? await this.findNearstBlock(this.web3s[k], time) : (await this.web3s[k].eth.getBlockNumber()));
         let blockTime = (await this.web3s[k].eth.getBlock(block)).timestamp;
         nearestBlocks[k] = {
           "block": block,
@@ -73,23 +76,28 @@ class App extends React.Component {
       };
       this.setState({nearestBlocks});
 
-      // Fetch by batchs of 100
-      for (let i = 0; i < tokenList.length; i+=100) {
+      // Fetch by batchs
+      let batchSize = 50;
+      for (let i = 0; i < tokenList.length; i+=batchSize) {
         let batches = {};
         for (let k in this.web3s) {
           batches[k] = new this.web3s[k].BatchRequest();
         }
 
-        for (let j = i; j < tokenList.length && j < i+100; j += 1) {
+        for (let j = i; j < tokenList.length && j < i+batchSize; j += 1) {
           let {symbol, name, platforms} = tokenList[j];
           
           for (let k in this.web3s) {
             if (platforms[k]) {
+              let block = nearestBlocks[k]?.block ?? "latest";
               let contractAddress = platforms[k].trim();
               let contract = new this.web3s[k].eth.Contract(erc20abi, contractAddress);
               batches[k].add(
-                contract.methods.balanceOf(this.state.address).call.request({}, async (err, balanceRaw) => {
-                  if (balanceRaw !== "0") {
+                contract.methods.balanceOf(this.state.address).call.request({}, block, async (err, balanceRaw) => {
+                  if (err) {
+                    console.log(err, contractAddress, this.state.address, block);
+                    // this.reportError(err.message, false);
+                  } else if (balanceRaw && balanceRaw !== "0") {
                     let decimals = await contract.methods.decimals().call();
                     let divisor = this.web3s[k].utils.toBN(10).pow(this.web3s[k].utils.toBN(decimals));
                     let dec = this.web3s[k].utils.toBN(balanceRaw).div(divisor);
@@ -100,7 +108,7 @@ class App extends React.Component {
                       ...this.state.balances,
                       {
                         chain: k,
-                        block: nearestBlocks[k],
+                        block: block,
                         tokenSymbol: symbol,
                         tokenName: name,
                         contract: contractAddress,
@@ -126,9 +134,9 @@ class App extends React.Component {
   }
 
 
-  reportError(err) {
+  reportError(err, stopFetching=false) {
     this.setState({
-      fetching: false,
+      fetching: stopFetching,
       error: err,
     });
   }
@@ -137,9 +145,10 @@ class App extends React.Component {
     return (
       <div className="App">
         <Container tectclassName="App-header">
-          <Input disabled={this.state.fetching} placeholder='Input the address to check ...' size="large" fluid focus icon="search" onChange={(e, data) => {
+          <Input value={this.state.address} disabled={this.state.fetching} placeholder='Input the address to check ...' size="large" fluid focus icon="search" onChange={(e, data) => {
             this.setState({ address: data.value });
           }}/>  
+
           <br/>
           <DateTimeInput
             fluid
@@ -153,6 +162,20 @@ class App extends React.Component {
             }}
             disabled={this.state.fetching}
           />
+
+          <br/>
+          <div style={{display: "flex"}}>
+            {Object.keys(this.web3s).map(chain => (
+              <div style={{paddingRight: "20px"}} key={chain}>
+                <b>{`${chain}`}</b>
+                <br/>
+                <Input disabled={this.state.fetching} placeholder={`${chain} block`} size="large" type="number" onChange={(e, data) => {
+                  this.setState({ blocks: {...this.state.blocks, [chain]: data.value} });
+                }}/> 
+              </div> 
+            ))}
+          </div>
+
           <br/>
           <Button inverted color='green' content='Get Balances' fluid disabled={this.state.fetching} loading={this.state.fetching} onClick={this.fetchBalances}/>
 
