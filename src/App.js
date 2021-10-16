@@ -14,6 +14,11 @@ const nativeTokens = {
   "ethereum": "eth",
   "polygon-pos": "matic",
 };
+const nativeTokenIds = {
+  "ethereum": "ethereum",
+  "polygon-pos": "matic-network",
+};
+
 
 class App extends React.Component {
 
@@ -30,6 +35,7 @@ class App extends React.Component {
 
     this.fetchBalances = this.fetchBalances.bind(this);
     this.reportError = this.reportError.bind(this);
+    this.fetchHistoryPrice = this.fetchHistoryPrice.bind(this);
 
     this.state = {
       balances: [],
@@ -82,7 +88,6 @@ class App extends React.Component {
       this.setState({nearestBlocks});
 
       this.jobs = 0;
-
      // Native tokens
       for (let k in this.web3s) {
           let block = nearestBlocks[k]?.block ?? "latest";
@@ -93,15 +98,20 @@ class App extends React.Component {
             } else if (balanceRaw && balanceRaw !== "0") {
               let balance = this.web3s[k].utils.fromWei(balanceRaw);
 
+              let datetime = this.formatDate(nearestBlocks[k].time);
+              let price = await this.fetchHistoryPrice(nativeTokenIds[k], datetime);
+
               this.setState({balances: [
                 ...this.state.balances,
                 {
                   chain: k,
                   block: block,
+                  time: nearestBlocks[k].time,
                   tokenSymbol: nativeTokens[k],
                   tokenName: k,
                   contract: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
                   balance: balance,
+                  price: price,
                 }
               ]})
             }
@@ -117,9 +127,11 @@ class App extends React.Component {
         }
 
         for (let j = i; j < tokenList.length && j < i+batchSize; j += 1) {
-          let {symbol, name, platforms} = tokenList[j];
+          let {id, symbol, name, platforms} = tokenList[j];
           
           for (let k in this.web3s) {
+            let datetime = this.formatDate(nearestBlocks[k].time);
+            
             if (platforms[k]) {
               let block = nearestBlocks[k]?.block ?? "latest";
               let contractAddress = platforms[k].trim();
@@ -132,6 +144,8 @@ class App extends React.Component {
                     console.log(err, contractAddress, this.state.address, block);
                     // this.reportError(err.message, false);
                   } else if (balanceRaw && balanceRaw !== "0") {
+                    let price = await this.fetchHistoryPrice(id, datetime);
+
                     let decimals = await contract.methods.decimals().call();
                     let divisor = this.web3s[k].utils.toBN(10).pow(this.web3s[k].utils.toBN(decimals));
                     let dec = this.web3s[k].utils.toBN(balanceRaw).div(divisor);
@@ -143,10 +157,12 @@ class App extends React.Component {
                       {
                         chain: k,
                         block: block,
+                        time: datetime,
                         tokenSymbol: symbol,
                         tokenName: name,
                         contract: contractAddress,
                         balance: balance,
+                        price: price,
                       }
                     ]})
                     console.log(symbol, name, contractAddress, err, balanceRaw, decimals, balance);
@@ -169,6 +185,27 @@ class App extends React.Component {
       this.reportError(e.message);
     }
   }
+
+
+  async fetchHistoryPrice(id, date) {
+    let data = await fetch(`https://api.coingecko.com/api/v3/coins/${id}/history?date=${date}`);
+    let dataJson = await data.json();
+    return dataJson?.market_data?.current_price?.usd;
+  }
+
+  formatDate(date) {
+    var d = new Date(date * 1000),
+        month = '' + (d.getMonth() + 1),
+        day = '' + d.getDate(),
+        year = d.getFullYear();
+
+    if (month.length < 2) 
+        month = '0' + month;
+    if (day.length < 2) 
+        day = '0' + day;
+
+    return [day, month, year].join('-');
+}
 
 
   reportError(err, stopFetching=false) {
@@ -252,6 +289,8 @@ class App extends React.Component {
               <Table.Row>
                 <Table.HeaderCell>Chain</Table.HeaderCell>
                 <Table.HeaderCell>Block</Table.HeaderCell>
+                <Table.HeaderCell>Date</Table.HeaderCell>
+                <Table.HeaderCell>Price (USD)</Table.HeaderCell>
                 <Table.HeaderCell>Token name</Table.HeaderCell>
                 <Table.HeaderCell>Balance</Table.HeaderCell>
                 <Table.HeaderCell>Token symbol</Table.HeaderCell>
@@ -260,10 +299,12 @@ class App extends React.Component {
             </Table.Header>
 
             <Table.Body>
-              {this.state.balances.map(({chain, block, tokenSymbol, tokenName, balance, contract}) => (
+              {this.state.balances.map(({chain, time, price, block, tokenSymbol, tokenName, balance, contract}) => (
                 <Table.Row>
                   <Table.Cell>{chain}</Table.Cell>
                   <Table.Cell>{block}</Table.Cell>
+                  <Table.Cell>{time}</Table.Cell>
+                  <Table.Cell>${price?.toFixed(2) ?? "-"}</Table.Cell>
                   <Table.Cell>{tokenName}</Table.Cell>
                   <Table.Cell>{balance}</Table.Cell>
                   <Table.Cell>{tokenSymbol.toUpperCase()}</Table.Cell>
