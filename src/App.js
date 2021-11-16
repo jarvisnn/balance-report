@@ -165,7 +165,7 @@ class App extends React.Component {
                         price: price,
                       }
                     ]})
-                    console.log(symbol, name, contractAddress, err, balanceRaw, decimals, balance);
+                    console.log(symbol, name, contractAddress, err, balanceRaw, decimals, balance, price);
                   }
                   this.jobs --;
                   if (this.jobs === 0) {
@@ -188,13 +188,16 @@ class App extends React.Component {
 
 
   async fetchHistoryPrice(id, date) {
-    let data = await fetch(`https://api.coingecko.com/api/v3/coins/${id}/history?date=${date}`);
+    let url = `https://api.coingecko.com/api/v3/coins/${id}/history?date=${date}`;
+    let data = await fetch(url);
     let dataJson = await data.json();
     return dataJson?.market_data?.current_price?.usd;
   }
 
   formatDate(date) {
-    var d = new Date(date * 1000),
+    var dateOffset = 24*60*60*1000; //1 days
+    // Get price from the previous day
+    var d = new Date(date * 1000 - dateOffset),
         month = '' + (d.getMonth() + 1),
         day = '' + d.getDate(),
         year = d.getFullYear();
@@ -290,9 +293,10 @@ class App extends React.Component {
                 <Table.HeaderCell>Chain</Table.HeaderCell>
                 <Table.HeaderCell>Block</Table.HeaderCell>
                 <Table.HeaderCell>Date</Table.HeaderCell>
-                <Table.HeaderCell>Price (USD)</Table.HeaderCell>
                 <Table.HeaderCell>Token name</Table.HeaderCell>
+                <Table.HeaderCell>Price (USD)</Table.HeaderCell>
                 <Table.HeaderCell>Balance</Table.HeaderCell>
+                <Table.HeaderCell>Total Value (USD)</Table.HeaderCell>
                 <Table.HeaderCell>Token symbol</Table.HeaderCell>
                 <Table.HeaderCell>Contract</Table.HeaderCell>
               </Table.Row>
@@ -304,9 +308,10 @@ class App extends React.Component {
                   <Table.Cell>{chain}</Table.Cell>
                   <Table.Cell>{block}</Table.Cell>
                   <Table.Cell>{time}</Table.Cell>
-                  <Table.Cell>${price?.toFixed(2) ?? "-"}</Table.Cell>
                   <Table.Cell>{tokenName}</Table.Cell>
+                  <Table.Cell>${price?.toFixed(2) ?? "-"}</Table.Cell>
                   <Table.Cell>{balance}</Table.Cell>
+                  <Table.Cell>${(price ?? 0) * balance}</Table.Cell>
                   <Table.Cell>{tokenSymbol.toUpperCase()}</Table.Cell>
                   <Table.Cell>{contract}</Table.Cell>
                 </Table.Row>
