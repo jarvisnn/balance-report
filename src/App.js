@@ -1,13 +1,13 @@
 import React from 'react';
 import Web3 from 'web3';
 import './App.css';
+
+// https://api.coingecko.com/api/v3/coins/list?include_platform=true
 import tokenList from './tokenlist.json';
 import erc20abi from './erc20.abi.json';
-import { Input, Button, Container, Header, Table, Message, List } from 'semantic-ui-react'
+import { Checkbox, Input, Button, Container, Header, Table, Message, List } from 'semantic-ui-react'
 import { DateTimeInput } from 'semantic-ui-calendar-react';
 import moment from 'moment';
-
-// const tokenList = [{"id":"kyber-network","symbol":"kncl","name":"Kyber Network Crystal Legacy","platforms":{"ethereum":"0xdd974d5c2e2928dea5f71b9825b8b646686bd200","fantom":"0x765277eebeca2e31912c9946eae1021199b39c61","harmony-shard-0":"0x0a47d2dc4b7ee3d4d7fd471d993b0821621e1769"}}];
 
 const dateTimeFormat = "DD-MM-YYYY HH:mm Z";
 const nativeTokens = {
@@ -29,13 +29,14 @@ class App extends React.Component {
     this.web3Eth = new Web3(new Web3.providers.HttpProvider("https://eth-mainnet.alchemyapi.io/v2/fJR25Od4foGhVrli2OCxRjmP5pkNhg1O")); 
     this.web3s = {
       "ethereum": this.web3Eth,
-      // https://polygon-mainnet.infura.io/v3/06be4b923b9446b8bec846a81e356f81
       "polygon-pos": new Web3(new Web3.providers.HttpProvider("https://polygon-mainnet.g.alchemy.com/v2/4IApMoKFRmy2g8eFrFV9uGxBf6j8wM7Y")),
+      // "binance-smart-chain": new Web3(new Web3.providers.HttpProvider("https://bsc-dataseed.binance.org/")),
     };
 
     this.fetchBalances = this.fetchBalances.bind(this);
     this.reportError = this.reportError.bind(this);
     this.fetchHistoryPrice = this.fetchHistoryPrice.bind(this);
+    this.fetchCurrentPrice = this.fetchCurrentPrice.bind(this);
 
     this.state = {
       balances: [],
@@ -43,6 +44,7 @@ class App extends React.Component {
       time: undefined,
       blocks: {},
       address: window.localStorage.getItem("address"),
+      useCurrentPrice: false,
     }
   }
 
@@ -65,6 +67,7 @@ class App extends React.Component {
       fetching: true,
       error: undefined,
       balances: [],
+      totalBalance: 0,
       nearestBlocks: {},
     });
     
@@ -88,7 +91,8 @@ class App extends React.Component {
       this.setState({nearestBlocks});
 
       this.jobs = 0;
-     // Native tokens
+      
+      // Native tokens
       for (let k in this.web3s) {
           let block = nearestBlocks[k]?.block ?? "latest";
           this.web3s[k].eth.getBalance(this.state.address, block, async (err, balanceRaw) => {
@@ -99,7 +103,7 @@ class App extends React.Component {
               let balance = this.web3s[k].utils.fromWei(balanceRaw);
 
               let datetime = this.formatDate(nearestBlocks[k].time);
-              let price = await this.fetchHistoryPrice(nativeTokenIds[k], datetime);
+              let price = await (this.state.useCurrentPrice ? this.fetchCurrentPrice(nativeTokenIds[k]) : this.fetchHistoryPrice(nativeTokenIds[k], datetime));
 
               this.setState({balances: [
                 ...this.state.balances,
@@ -119,7 +123,7 @@ class App extends React.Component {
       }
       
       // Fetch by batchs
-      let batchSize = 100;
+      let batchSize = 50;
       for (let i = 0; i < tokenList.length; i+=batchSize) {
         let batches = {};
         for (let k in this.web3s) {
@@ -144,7 +148,7 @@ class App extends React.Component {
                     console.log(err, contractAddress, this.state.address, block);
                     // this.reportError(err.message, false);
                   } else if (balanceRaw && balanceRaw !== "0") {
-                    let price = await this.fetchHistoryPrice(id, datetime);
+                    let price = await (this.state.useCurrentPrice ? this.fetchCurrentPrice(id) : this.fetchHistoryPrice(id, datetime));
 
                     let decimals = await contract.methods.decimals().call();
                     let divisor = this.web3s[k].utils.toBN(10).pow(this.web3s[k].utils.toBN(decimals));
@@ -152,7 +156,8 @@ class App extends React.Component {
                     let fra = this.web3s[k].utils.toBN(balanceRaw).mod(divisor);
                     let balance = dec.toString() + "." + fra.toString();
 
-                    this.setState({balances: [
+                    ;
+                    this.setState({totalBalance: this.state.totalBalance + (price??0) * balance, balances: [
                       ...this.state.balances,
                       {
                         chain: k,
@@ -194,6 +199,13 @@ class App extends React.Component {
     return dataJson?.market_data?.current_price?.usd;
   }
 
+  async fetchCurrentPrice(id) {
+    let url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`;
+    let data = await fetch(url);
+    let dataJson = await data.json();
+    return dataJson?.[id]?.usd;
+  }
+
   formatDate(date) {
     var dateOffset = 24*60*60*1000; //1 days
     // Get price from the previous day
@@ -228,6 +240,7 @@ class App extends React.Component {
               <List.Item as='li'>Fetching balances by datetime may take time, please be patient</List.Item>
               <List.Item as='li'>Leaving the datetime and block empty for the latest block data</List.Item>
               <List.Item as='li'>Block is used if both block and datetime exist</List.Item>
+              <List.Item as='li'>USD Price is at the previous-day of the current selected day by default</List.Item>
             </List>
 
             <i>If you have any issue, ping me at <a href = "mailto: nvdung149@gmail.com">nvdung149@gmail.com</a></i>
@@ -250,6 +263,19 @@ class App extends React.Component {
             }}
             disabled={this.state.fetching}
           />
+
+          <br/>
+          <span className="white">
+            <Checkbox 
+              label={"Use the current token USD price"} 
+              checked={this.state.useCurrentPrice} 
+              disabled={this.state.fetching}
+              onClick={() => {
+                this.setState({useCurrentPrice: !this.state.useCurrentPrice})
+              }}
+            />
+          </span>
+          <br/>
 
           <br/>
           <div style={{display: "flex"}}>
@@ -285,6 +311,14 @@ class App extends React.Component {
               );
             })}
           </div>
+
+          <br/>
+          <b>TOTAL VALUE: ${this.state.totalBalance ?? 0}</b>
+
+          <br/>
+          <b>Price is snapshot on: {this.state.useCurrentPrice ? "REAL-TIME" : (
+            Object.values(this.state.nearestBlocks)?.[0]?.time ? this.formatDate(Object.values(this.state.nearestBlocks)?.[0]?.time) : ""
+          )}</b>
 
           <br/>
           <Table celled>
